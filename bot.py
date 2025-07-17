@@ -1,46 +1,37 @@
 import os
-import asyncio
 from aiogram import Bot, Dispatcher, types
+from aiogram.filters import Command
 from aiohttp import web
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+WEBHOOK_HOST = os.getenv("WEBHOOK_HOST")  # render.com domain
 WEBHOOK_PATH = "/webhook"
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # Например, https://yourapp.onrender.com/webhook
+WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 
-@dp.message(commands=["start"])
+@dp.message(Command("start"))
 async def start_cmd(message: types.Message):
-    await message.answer("🐾 Привет! Я бот для поиска животных в Ижевске.")
-
-@dp.message(commands=["status"])
-async def status_cmd(message: types.Message):
-    await message.answer("✅ Всё работает!")
-
-@dp.message(commands=["test"])
-async def test_cmd(message: types.Message):
-    await message.answer("🧪 Тест пройден!")
+    await message.answer("Привет! Я бот для поиска животных в Ижевске.")
 
 async def on_startup(app):
     await bot.set_webhook(WEBHOOK_URL)
 
 async def on_shutdown(app):
     await bot.delete_webhook()
-    await bot.session.close()
 
-async def handle(request):
-    data = await request.json()
-    update = types.Update(**data)
-    await dp.process_update(update)
-    return web.Response(text="OK")
+async def handle_webhook(request):
+    body = await request.read()
+    update = types.Update.model_validate_json(body.decode())
+    await dp.feed_update(bot, update)
+    return web.Response()
 
 app = web.Application()
-app.router.add_post(WEBHOOK_PATH, handle)
+app.router.add_post(WEBHOOK_PATH, handle_webhook)
 
 app.on_startup.append(on_startup)
 app.on_shutdown.append(on_shutdown)
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8000))
-    web.run_app(app, host="0.0.0.0", port=port)
+    web.run_app(app, port=int(os.getenv("PORT", 8000)))
